@@ -12,8 +12,9 @@ CATALOGO = {
         ("Mosko EU", "https://moskomoto.eu/products/reckless-40l-v4"),
     ],
     "Enduristan Blizzard 2.25": [
-        ("Enduristan Oficial", "https://www.enduristan.com/products/blizzard-2-saddle-bags"),
-        ("Ubricarmotos", "https://www.ubricarmotos.com/enduristan/21650-alforjas-enduristan-blizzard-v3-talla-m-225l.html"),
+        ("Enduristan EU", "https://www.enduristan.com/products/blizzard-2-saddle-bags"),
+        ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/420-alforjas-enduristan-blizzard.html"),
+        ("FC-Moto", "https://www.fc-moto.de/es/Enduristan-Blizzard-2-Alforjas"),
     ],
     "Kriega OS-Base 701": [
         ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/1950-soporte-kriega-overlander-ktm-690-husq-701-gasgas-700.html"),
@@ -41,27 +42,59 @@ def enviar_telegram(texto):
         "disable_web_page_preview": True
     }, timeout=10)
 
-def limpiar_numero(texto):
+def limpiar_numero(texto, minimo=110):
     if not texto:
         return None
-    limpio = re.sub(r"[^\d,\.]", "", texto)
+    limpio = re.sub(r"[^\d,\.]", "", str(texto))
     if "," in limpio and "." in limpio:
         limpio = limpio.replace(".", "").replace(",", ".")
     elif "," in limpio:
         limpio = limpio.replace(",", ".")
     try:
         val = float(limpio)
-        return val if 110 < val < 1500 else None
+        return val if minimo < val < 1500 else None
     except ValueError:
         return None
 
-def extraer_precio(soup):
+def extraer_shopify_json(url, minimo):
+    # Endpoint directo de Shopify (.js) que devuelve precios reales de variantes en céntimos
+    try:
+        resp = requests.get(f"{url}.js", headers=HEADERS, timeout=10)
+        if resp.status_code == 200:
+            data = resp.json()
+            precios = []
+            for v in data.get("variants", []):
+                # En Enduristan la variante 2.25 suele incluir "2.25" o "M" en el título
+                titulo = v.get("title", "").lower()
+                precio_eur = v.get("price", 0) / 100.0
+                if "2.25" in titulo or "2,25" in titulo or len(data.get("variants", [])) == 1:
+                    if minimo < precio_eur < 1500:
+                        return precio_eur
+                if minimo < precio_eur < 1500:
+                    precios.append(precio_eur)
+            if precios:
+                return min(precios)
+    except Exception:
+        pass
+    return None
+
+def extraer_precio(url, resp_text, minimo):
+    # 1. Si es tienda Shopify (Mosko o Enduristan), leer directamente su JSON interno
+    if "enduristan.com" in url or "moskomoto.eu" in url:
+        val_shopify = extraer_shopify_json(url, minimo)
+        if val_shopify:
+            return val_shopify
+
+    soup = BeautifulSoup(resp_text, "html.parser")
+
+    # 2. Metadatos OpenGraph
     meta_price = soup.find("meta", {"property": "og:price:amount"}) or soup.find("meta", {"property": "product:price:amount"})
     if meta_price and meta_price.get("content"):
-        val = limpiar_numero(meta_price["content"])
+        val = limpiar_numero(meta_price["content"], minimo)
         if val:
             return val
 
+    # 3. Datos estructurados JSON-LD
     for script in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             data = json.loads(script.string)
@@ -72,15 +105,15 @@ def extraer_precio(soup):
                 offers = offers[0]
             if isinstance(offers, dict):
                 precio = offers.get("price") or offers.get("lowPrice")
-                val = limpiar_numero(str(precio))
+                val = limpiar_numero(precio, minimo)
                 if val:
                     return val
         except Exception:
             pass
 
+    # 4. Selectores HTML habituales
     selectores = [
         ("span", {"class": "current-price-value"}),
-        ("span", {"id": "our_price_display"}),
         ("span", {"itemprop": "price"}),
         ("span", {"class": "price"}),
         ("span", {"class": "money"}),
@@ -88,7 +121,7 @@ def extraer_precio(soup):
     for tag, attrs in selectores:
         el = soup.find(tag, attrs)
         if el:
-            val = limpiar_numero(el.get_text(strip=True))
+            val = limpiar_numero(el.get_text(strip=True), minimo)
             if val:
                 return val
 
@@ -98,6 +131,8 @@ def main():
     mensaje = "🏍️ *Radar Multi-Tienda Black Friday* 🏍️\n\n"
     
     for modelo, fuentes in CATALOGO.items():
+        # Para la Blizzard exigimos mínimo 160 € para evitar accesorios sueltos
+        minimo_modelo = 160 if "Blizzard" in modelo else 110
         mejor_precio = None
         mejor_tienda = ""
         mejor_url = ""
@@ -106,8 +141,7 @@ def main():
             try:
                 resp = requests.get(url, headers=HEADERS, timeout=12)
                 if resp.status_code == 200:
-                    soup = BeautifulSoup(resp.text, "html.parser")
-                    precio = extraer_precio(soup)
+                    precio = extraer_precio(url, resp.text, minimo_modelo)
                     if precio is not None:
                         if mejor_precio is None or precio < mejor_precio:
                             mejor_precio = precio
