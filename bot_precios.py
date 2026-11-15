@@ -1,16 +1,17 @@
 import os
+import json
 import requests
 from bs4 import BeautifulSoup
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-# Ahora buscamos por términos de producto para comparar en tiendas de todo internet
-BUSQUEDAS = {
-    "Mosko Reckless 40L": "https://www.google.com/search?q=Mosko+Moto+Reckless+40L+precio&tbm=shop",
-    "Enduristan Blizzard 2": "https://www.google.com/search?q=Enduristan+Blizzard+2+precio&tbm=shop",
-    "Kriega OS-Base 701": "https://www.google.com/search?q=Kriega+OS-Base+701+precio&tbm=shop",
-    "Kriega Bolsa OS-18": "https://www.google.com/search?q=Kriega+OS-18+precio&tbm=shop",
+# Enlaces directos a tiendas europeas fiables con precios accesibles
+URLS = {
+    "Mosko Reckless 40L (EU)": "https://moskomoto.eu/products/reckless-40l-v4",
+    "Enduristan Blizzard 2.25": "https://www.motoblouz.es/alforjas-moto-enduristan-blizzard-bolsas-laterales-v3-138676-v.html",
+    "Kriega OS-Base 701 (TwinTrail)": "https://www.twintrail.com/alforjas-y-bolsas-moto/1950-soporte-kriega-overlander-ktm-690-husq-701-gasgas-700.html",
+    "Kriega Bolsa OS-18 (TwinTrail)": "https://www.twintrail.com/alforjas-y-bolsas-moto/1646-alforja-kriega-overlander-s-os-18.html",
 }
 
 HEADERS = {
@@ -29,33 +30,55 @@ def enviar_telegram(texto):
         "disable_web_page_preview": True
     }, timeout=10)
 
-def extraer_precio_google(soup):
-    # Buscar patrones de precios en los resultados de Google Shopping
-    for span in soup.find_all("span", class_=lambda x: x and ('price' in x.lower() or 'amount' in x.lower())):
-        texto = span.get_text(strip=True)
-        if ("€" in texto or "EUR" in texto) and any(c.isdigit() for c in texto):
-            if len(texto) < 12:
-                return texto
-    
-    # Intento alternativo buscando símbolos de moneda en el texto general
-    divs = soup.find_all(["div", "span"], string=lambda s: s and "€" in s and any(c.isdigit() for c in s))
-    for d in divs:
-        texto = d.get_text(strip=True)
-        if len(texto) < 15:
-            return texto
+def extraer_precio(soup, url):
+    # Si es Motoblouz o similar (PrestaShop / metadatos)
+    meta_price = soup.find("meta", {"property": "og:price:amount"}) or soup.find("meta", {"property": "product:price:amount"})
+    if meta_price and meta_price.get("content"):
+        return f"{meta_price['content']} EUR"
 
-    return "Consultar en comparador"
+    # Datos estructurados JSON-LD
+    for script in soup.find_all("script", {"type": "application/ld+json"}):
+        try:
+            data = json.loads(script.string)
+            if isinstance(data, list):
+                data = data[0]
+            offers = data.get("offers")
+            if isinstance(offers, list):
+                offers = offers[0]
+            if isinstance(offers, dict):
+                precio = offers.get("price") or offers.get("lowPrice")
+                if precio:
+                    return f"{precio} EUR"
+        except Exception:
+            pass
+
+    # Selectores clásicos (PrestaShop / WooCommerce / Tiendas de trail)
+    selectores = [
+        ("span", {"class": "current-price-value"}),
+        ("span", {"itemprop": "price"}),
+        ("span", {"class": "price"}),
+        ("span", {"class": "price-item--sale"}),
+        ("span", {"class": "money"}),
+    ]
+    for tag, attrs in selectores:
+        el = soup.find(tag, attrs)
+        if el:
+            texto = el.get_text(strip=True)
+            if any(c.isdigit() for c in texto):
+                return texto
+
+    return "Consultar web"
 
 def main():
-    mensaje = "🏍️ *Buscador de Chollos (Black Friday)* 🏍️\n\n"
-    for modelo, url in BUSQUEDAS.items():
+    mensaje = "🏍️ *Monitoreo Alforjas Black Friday* 🏍️\n\n"
+    for modelo, url in URLS.items():
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15)
-            soup = BeautifulSoup(resp.text, "html.param" if hasattr(BeautifulSoup, 'parser') else "html.parser")
-            precio = extraer_precio_google(soup)
-            mensaje += f"• *{modelo}*\n  Mejor precio aprox: `{precio}`\n  [Ver en Google Shopping]({url})\n\n"
+            soup = BeautifulSoup(resp.text, "html.parser")
+            precio = extraer_precio(soup, url)
+            mensaje += f"• *{modelo}*\n  Precio: `{precio}`\n  [Ver enlace]({url})\n\n"
         except Exception:
-            mensaje += f"• *{modelo}*\n  Error al conectar\n\n"
+            mensaje += f"• *{modelo}*\n  Error de conexión\n\n"
     
     enviar_telegram(mensaje)
 
