@@ -22,7 +22,8 @@ def enviar_telegram(texto):
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": CHAT_ID, "text": texto}, timeout=10)
+        resp = requests.post(url, data={"chat_id": CHAT_ID, "text": texto}, timeout=10)
+        print(f"Respuesta Telegram: {resp.status_code}")
     except Exception as e:
         print(f"Error enviando a Telegram: {e}")
 
@@ -40,17 +41,22 @@ def extraer_precio(soup):
             texto = el.get_text(strip=True)
             if any(c.isdigit() for c in texto):
                 return texto
-    return None
+    return "Precio no encontrado (revisar web)"
 
 def main():
+    mensaje = "🏍️ **Resumen Alforjas Moto** 🏍️\n\n"
     for modelo, url in URLS.items():
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15)
             soup = BeautifulSoup(resp.text, "html.parser")
             precio = extraer_precio(soup)
+            mensaje += f"• **{modelo}**\n  Precio: {precio}\n  [Ver enlace]({url})\n\n"
             print(f"Revisado {modelo}: {precio}")
         except Exception as e:
+            mensaje += f"• **{modelo}**\n  Error al conectar\n\n"
             print(f"Error al conectar con {modelo}: {e}")
+    
+    enviar_telegram(mensaje)
 
 if __name__ == "__main__":
     main()
