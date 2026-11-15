@@ -12,8 +12,8 @@ CATALOGO = {
         ("Mosko EU", "https://moskomoto.eu/products/reckless-40l-v4"),
     ],
     "Enduristan Blizzard 2.25": [
+        ("Enduristan Oficial", "https://www.enduristan.com/products/blizzard-2-saddle-bags"),
         ("Ubricarmotos", "https://www.ubricarmotos.com/enduristan/21650-alforjas-enduristan-blizzard-v3-talla-m-225l.html"),
-        ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/420-alforjas-enduristan-blizzard.html"),
     ],
     "Kriega OS-Base 701": [
         ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/1950-soporte-kriega-overlander-ktm-690-husq-701-gasgas-700.html"),
