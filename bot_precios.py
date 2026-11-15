@@ -57,7 +57,7 @@ def limpiar_numero(texto):
         limpio = limpio.replace(",", ".")
     try:
         val = float(limpio)
-        return val if 30 < val < 1500 else None # Filtro anti-falsos positivos
+        return val if 110 < val < 1500 else None #Filtro anti-falsos positivos
     except ValueError:
         return None
 
