@@ -1,29 +1,29 @@
-name: Robot Precios Black Friday
+name: Monitoreo de Precios
 
 on:
   schedule:
-    - cron: '0 */2 * * *'
+    - cron: '0 9 * * *'
   workflow_dispatch:
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repositorio
+      - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Configurar Python
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Instalar dependencias
+      - name: Install dependencies
         run: |
           pip install requests beautifulsoup4
 
-      - name: Ejecutar script de precios
+      - name: Run script
+        run: python bot_precios.py
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
-        run: |
-          python bot_precios.py
+          SERPER_API_KEY: ${{ secrets.SERPER_API_KEY }}
