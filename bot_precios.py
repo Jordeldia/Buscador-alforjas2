@@ -7,15 +7,14 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-# Lista de múltiples tiendas/comparadores por producto
-# El bot comprobará todas las URLs de cada grupo y te dará el precio más bajo
+# Catálogo multi-tienda: comprueba todas las fuentes de cada modelo y elige la más barata
 CATALOGO = {
     "Mosko Reckless 40L": [
         ("Mosko EU", "https://moskomoto.eu/products/reckless-40l-v4"),
     ],
     "Enduristan Blizzard 2.25": [
+        ("GreenlandMX", "https://www.greenlandmx.es/es/alforjas-enduristan-blizzard-2-25l-negro-p-61591.html"),
         ("FC-Moto", "https://www.fc-moto.de/es/Enduristan-Blizzard-2-Alforjas"),
-        ("Idealo ES", "https://www.idealo.es/precios/202149546/enduristan-blizzard.html"),
         ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/420-alforjas-enduristan-blizzard.html"),
     ],
     "Kriega OS-Base 701": [
@@ -47,7 +46,6 @@ def enviar_telegram(texto):
     }, timeout=10)
 
 def limpiar_numero(texto):
-    # Convierte "199,90 €" o "555.0 EUR" en un float 199.90 para poder comparar cuál es menor
     if not texto:
         return None
     limpio = re.sub(r"[^\d,\.]", "", texto)
@@ -57,7 +55,8 @@ def limpiar_numero(texto):
         limpio = limpio.replace(",", ".")
     try:
         val = float(limpio)
-        return val if 110 < val < 1500 else None #Filtro anti-falsos positivos
+        # Ignora accesorios baratos (< 110 €) y errores (> 1500 €)
+        return val if 110 < val < 1500 else None
     except ValueError:
         return None
 
@@ -86,11 +85,10 @@ def extraer_precio(soup):
         except Exception:
             pass
 
-    # 3. Selectores HTML habituales (PrestaShop, Idealo, FC-Moto, Motocard)
+    # 3. Selectores HTML habituales en tiendas europeas
     selectores = [
         ("span", {"class": "current-price-value"}),
         ("span", {"itemprop": "price"}),
-        ("div", {"class": "productOffers-listItemOfferPrice"}), # Idealo
         ("span", {"class": "price"}),
         ("span", {"class": "money"}),
     ]
