@@ -12,9 +12,8 @@ CATALOGO = {
         ("Mosko EU", "https://moskomoto.eu/products/reckless-40l-v4"),
     ],
     "Enduristan Blizzard 2.25": [
-        ("Enduristan EU", "https://www.enduristan.com/products/blizzard-2-saddle-bags"),
-        ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/420-alforjas-enduristan-blizzard.html"),
         ("FC-Moto", "https://www.fc-moto.de/es/Enduristan-Blizzard-2-Alforjas"),
+        ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/420-alforjas-enduristan-blizzard.html"),
     ],
     "Kriega OS-Base 701": [
         ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/1950-soporte-kriega-overlander-ktm-690-husq-701-gasgas-700.html"),
@@ -56,45 +55,29 @@ def limpiar_numero(texto, minimo=110):
     except ValueError:
         return None
 
-def extraer_shopify_json(url, minimo):
-    # Endpoint directo de Shopify (.js) que devuelve precios reales de variantes en céntimos
-    try:
-        resp = requests.get(f"{url}.js", headers=HEADERS, timeout=10)
-        if resp.status_code == 200:
-            data = resp.json()
-            precios = []
-            for v in data.get("variants", []):
-                # En Enduristan la variante 2.25 suele incluir "2.25" o "M" en el título
-                titulo = v.get("title", "").lower()
-                precio_eur = v.get("price", 0) / 100.0
-                if "2.25" in titulo or "2,25" in titulo or len(data.get("variants", [])) == 1:
-                    if minimo < precio_eur < 1500:
-                        return precio_eur
-                if minimo < precio_eur < 1500:
-                    precios.append(precio_eur)
-            if precios:
-                return min(precios)
-    except Exception:
-        pass
-    return None
-
 def extraer_precio(url, resp_text, minimo):
-    # 1. Si es tienda Shopify (Mosko o Enduristan), leer directamente su JSON interno
-    if "enduristan.com" in url or "moskomoto.eu" in url:
-        val_shopify = extraer_shopify_json(url, minimo)
-        if val_shopify:
-            return val_shopify
+    # Si es Shopify (Mosko)
+    if "moskomoto.eu" in url:
+        try:
+            resp_js = requests.get(f"{url}.js", headers=HEADERS, timeout=10)
+            if resp_js.status_code == 200:
+                data = resp_js.json()
+                precio_eur = data.get("variants", [{}])[0].get("price", 0) / 100.0
+                if minimo < precio_eur < 1500:
+                    return precio_eur
+        except Exception:
+            pass
 
     soup = BeautifulSoup(resp_text, "html.parser")
 
-    # 2. Metadatos OpenGraph
+    # Metadatos OpenGraph
     meta_price = soup.find("meta", {"property": "og:price:amount"}) or soup.find("meta", {"property": "product:price:amount"})
     if meta_price and meta_price.get("content"):
         val = limpiar_numero(meta_price["content"], minimo)
         if val:
             return val
 
-    # 3. Datos estructurados JSON-LD
+    # Datos estructurados JSON-LD
     for script in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             data = json.loads(script.string)
@@ -111,11 +94,11 @@ def extraer_precio(url, resp_text, minimo):
         except Exception:
             pass
 
-    # 4. Selectores HTML habituales
+    # Selectores HTML (FC-Moto, TwinTrail, etc.)
     selectores = [
         ("span", {"class": "current-price-value"}),
-        ("span", {"itemprop": "price"}),
         ("span", {"class": "price"}),
+        ("span", {"itemprop": "price"}),
         ("span", {"class": "money"}),
     ]
     for tag, attrs in selectores:
@@ -131,7 +114,6 @@ def main():
     mensaje = "🏍️ *Radar Multi-Tienda Black Friday* 🏍️\n\n"
     
     for modelo, fuentes in CATALOGO.items():
-        # Para la Blizzard exigimos mínimo 160 € para evitar accesorios sueltos
         minimo_modelo = 160 if "Blizzard" in modelo else 110
         mejor_precio = None
         mejor_tienda = ""
