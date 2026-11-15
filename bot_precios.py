@@ -1,5 +1,4 @@
 import os
-import re
 import json
 import requests
 from bs4 import BeautifulSoup
@@ -30,15 +29,23 @@ def enviar_telegram(texto):
         "disable_web_page_preview": True
     }, timeout=10)
 
-def extraer_precio(soup, html_raw):
-    # 1. Buscar en metadatos estándar (OpenGraph / Shopify)
+def extraer_precio(soup, url):
+    # Caso especial Enduristan: buscar patrones numéricos de precio en clases de Shopify específicas
+    if "enduristan.com" in url:
+        for span in soup.find_all(["span", "div"], class_=lambda x: x and ('price' in x.lower() or 'amount' in x.lower())):
+            texto = span.get_text(strip=True)
+            if ("€" in texto or "CHF" in texto or "EUR" in texto) and any(c.isdigit() for c in texto):
+                if len(texto) < 15: # Evitar bloques de texto largos
+                    return texto
+
+    # Buscar en metadatos estándar (OpenGraph / Shopify)
     meta_price = soup.find("meta", {"property": "og:price:amount"}) or soup.find("meta", {"property": "product:price:amount"})
     meta_curr = soup.find("meta", {"property": "og:price:currency"}) or soup.find("meta", {"property": "product:price:currency"})
     if meta_price and meta_price.get("content"):
         moneda = meta_curr.get("content", "€") if meta_curr else "€"
         return f"{meta_price['content']} {moneda}"
 
-    # 2. Buscar en datos estructurados JSON-LD (Google Shopping)
+    # Buscar en datos estructurados JSON-LD (Google Shopping)
     for script in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             data = json.loads(script.string)
@@ -55,7 +62,7 @@ def extraer_precio(soup, html_raw):
         except Exception:
             pass
 
-    # 3. Buscar en etiquetas HTML clásicas (TwinTrail / PrestaShop)
+    # Buscar en etiquetas HTML clásicas (TwinTrail / PrestaShop)
     selectores = [
         ("span", {"class": "current-price-value"}),
         ("span", {"itemprop": "price"}),
@@ -78,7 +85,7 @@ def main():
         try:
             resp = requests.get(url, headers=HEADERS, timeout=15)
             soup = BeautifulSoup(resp.text, "html.parser")
-            precio = extraer_precio(soup, resp.text)
+            precio = extraer_precio(soup, url)
             mensaje += f"• *{modelo}*\n  Precio: `{precio}`\n  [Ver enlace]({url})\n\n"
         except Exception:
             mensaje += f"• *{modelo}*\n  Error al conectar\n\n"
