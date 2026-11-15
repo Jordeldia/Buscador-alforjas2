@@ -7,25 +7,21 @@ from bs4 import BeautifulSoup
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 CHAT_ID = os.environ.get("CHAT_ID")
 
-# Catálogo multi-tienda: comprueba todas las fuentes de cada modelo y elige la más barata
 CATALOGO = {
     "Mosko Reckless 40L": [
         ("Mosko EU", "https://moskomoto.eu/products/reckless-40l-v4"),
     ],
     "Enduristan Blizzard 2.25": [
-        ("GreenlandMX", "https://www.greenlandmx.es/es/alforjas-enduristan-blizzard-2-25l-negro-p-61591.html"),
-        ("FC-Moto", "https://www.fc-moto.de/es/Enduristan-Blizzard-2-Alforjas"),
+        ("Ubricarmotos", "https://www.ubricarmotos.com/enduristan/21650-alforjas-enduristan-blizzard-v3-talla-m-225l.html"),
         ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/420-alforjas-enduristan-blizzard.html"),
     ],
     "Kriega OS-Base 701": [
         ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/1950-soporte-kriega-overlander-ktm-690-husq-701-gasgas-700.html"),
         ("FC-Moto", "https://www.fc-moto.de/es/Kriega-OS-Base-KTM-690-Husqvarna-701-GasGas-700"),
-        ("Motocard", "https://www.motocard.com/bolsas/kriega-os_base_ktm_690_husqvarna_701_gasgas_700.aspx"),
     ],
     "Kriega Bolsa OS-18": [
         ("TwinTrail", "https://www.twintrail.com/alforjas-y-bolsas-moto/1646-alforja-kriega-overlander-s-os-18.html"),
         ("FC-Moto", "https://www.fc-moto.de/es/Kriega-OS-18-Adventure-Pack"),
-        ("Motocard", "https://www.motocard.com/bolsas/kriega-os_18.aspx"),
     ]
 }
 
@@ -55,20 +51,17 @@ def limpiar_numero(texto):
         limpio = limpio.replace(",", ".")
     try:
         val = float(limpio)
-        # Ignora accesorios baratos (< 110 €) y errores (> 1500 €)
         return val if 110 < val < 1500 else None
     except ValueError:
         return None
 
 def extraer_precio(soup):
-    # 1. Metadatos OpenGraph / Shopify
     meta_price = soup.find("meta", {"property": "og:price:amount"}) or soup.find("meta", {"property": "product:price:amount"})
     if meta_price and meta_price.get("content"):
         val = limpiar_numero(meta_price["content"])
         if val:
             return val
 
-    # 2. Datos estructurados JSON-LD
     for script in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             data = json.loads(script.string)
@@ -85,9 +78,9 @@ def extraer_precio(soup):
         except Exception:
             pass
 
-    # 3. Selectores HTML habituales en tiendas europeas
     selectores = [
         ("span", {"class": "current-price-value"}),
+        ("span", {"id": "our_price_display"}),
         ("span", {"itemprop": "price"}),
         ("span", {"class": "price"}),
         ("span", {"class": "money"}),
